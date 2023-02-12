@@ -1,0 +1,6 @@
+accounts:
+- deviceId: ~
+  password: AppShare
+  uid: AppShare
+host: https://appshare.vip
+version: v1.0.0

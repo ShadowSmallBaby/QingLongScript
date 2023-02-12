@@ -10,14 +10,15 @@
 1. 脚本仅供学习交流使用, 请在下载后24h内删除
 2. 星播客手动抽奖，只添加直播时间，具体查看日志和消息推送
 """
+from re import findall
 from random import randint
 from base64 import b64encode
 from time import mktime, strptime, strftime, sleep as time_sleep
 from requests import post, get, packages
 from datetime import datetime, timedelta
 from asyncio import wait, sleep, run
-from utils.tool import timestamp, print_now
-import utils.notify as notify
+from Utils.tool import timestamp, print_now
+import Utils.notify as notify
 from check_in_by_yz import ChinaTelecom
 import time
 import requests
@@ -116,7 +117,7 @@ class TelecomLotter:
         except:
             return None
 
-    async def lotter(self, liveId, period):
+    def lotter(self, liveId, period):
         """
         :param liveId: 直播间id
         :param period: 某个参数 暂不明意义 查询直播间信息时会返回
@@ -131,7 +132,6 @@ class TelecomLotter:
             if active_code1 is not None or active_code2 is not None:
                 break
             print(f"此直播间暂无抽奖活动, 等待10秒后再次查询 剩余查询次数{2 - i}")
-            await sleep(10)
             continue
         if active_code1 is None and active_code2 is None:
             print("查询结束 本直播间暂无抽奖活动")
@@ -154,9 +154,8 @@ class TelecomLotter:
             }
             data = post(url, headers=headers, json=body).json()
             print(data)
-            time_sleep(10)
             if data["code"] == 0:
-                push("直播抽奖", f"{self.phone}: 获得了{data['data']['title']}")
+                notify.send("直播抽奖", f"{self.phone}: 获得了{data['data']['title']}")
 
     def find_price(self):
         url = "https://xbk.189.cn/xbkapi/active/v2/lottery/getMyWinList?page=1&give_status=200&activeCode="
@@ -173,7 +172,7 @@ class TelecomLotter:
                            compare_date(info["win_time"])]
             month_price_info = "\n".join(month_price)
             print(month_price_info)
-            push("本月直播奖品查询", f"{self.phone}:\n{month_price_info}")
+            notify.send("本月直播奖品查询", f"{self.phone}:\n{month_price_info}")
         else:
             print(f"获取奖品信息失败, 接口返回" + str(data))
 

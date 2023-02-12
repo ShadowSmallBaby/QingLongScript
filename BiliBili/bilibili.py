@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from bilibiliapi import *
-import utils.notify
+import Utils.notify
 import os
 
 sys.path.append('../')
@@ -13,7 +13,7 @@ else:
     os.environ['TZ'] = 'UTC-8CN'
     time.tzset()
 
-sendNotify = utils.notify
+sendNotify = Utils.notify
 SEND_KEY = os.environ['SEND_KEY']
 BILI_COOKIE = os.environ['BILI_COOKIE'].replace(" ", "")
 

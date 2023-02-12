@@ -25,15 +25,15 @@ from time import sleep, strftime
 from re import findall
 from requests import get, post
 from base64 import b64encode
-from utils.aes_encrypt import AES_Ctypt
-from utils.rsa_encrypt import RSA_Encrypt
-from utils.tool import timestamp, get_environ, print_now
-from utils.telecom_login import TelecomLogin
+from Utils.aes_encrypt import AES_Ctypt
+from Utils.rsa_encrypt import RSA_Encrypt
+from Utils.tool import timestamp, get_environ, print_now
+from Utils.telecom_login_by_yz import TelecomLogin
 from string import ascii_letters, digits
 import threading
 
 try:
-    import utils.notify
+    import Utils.notify
 except Exception as err:  # 异常捕捉
     print(f'{err}\n加载通知服务失败~\n')
 
@@ -251,7 +251,7 @@ class ChinaTelecom:
         授权星播客登录获取 usercode
         :return:
         """
-        url = f"https://xbk.189.cn/xbkapi/api/auth/jump?userID={self.ticket}&version=9.3.3&type=room&l=renwu"
+        url = f"https://xbk.189.cn/xbkapi/api/auth/dxzt?userID={self.ticket}&version=9.6.1&type=luckyDraw&active_code=20220425Qxtm5ycTcdMXdAR2LC"
         self.headers_live = {
             "User-Agent": self.ua,
             "Host": "xbk.189.cn",

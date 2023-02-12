@@ -11,17 +11,15 @@ from requests import post
 from datetime import datetime
 from xml.etree.ElementTree import XML
 from uuid import uuid4
-from encrypt_symmetric import Crypt
-from rsa_encrypt import RSA_Encrypt
-from tool import print_now
-
+from Utils.encrypt_symmetric import Crypt
+from Utils.rsa_encrypt import RSA_Encrypt
+from Utils.tool import print_now
 
 class TelecomLogin:
     def __init__(self, account, pwd):
         self.account = account
         self.pwd = pwd
         self.deviceUid = uuid4().hex
-
     def login(self):
         url = "https://appgologin.189.cn:9031/login/client/userLoginNormal"
         timestamp = datetime.now().__format__("%Y%m%d%H%M%S")
@@ -44,8 +42,7 @@ class TelecomLogin:
                 "fieldData": {
                     "loginType": "4",
                     "accountType": "",
-                    "loginAuthCipherAsymmertric": RSA_Encrypt(key).encrypt(
-                        f"iPhone 14 15.4.{self.deviceUid[:12]}{self.account}{timestamp}{self.pwd}0$$$0.", b64=True),
+                    "loginAuthCipherAsymmertric": RSA_Encrypt(key).encrypt(f"iPhone 14 15.4.{self.deviceUid[:12]}{self.account}{timestamp}{self.pwd}0$$$0.", b64=True),
                     "deviceUid": self.deviceUid[:16],
                     "phoneNum": self.get_phoneNum(self.account),
                     "isChinatelecom": "0",
@@ -62,7 +59,7 @@ class TelecomLogin:
         data = post(url, headers=headers, json=body).json()
         code = data["responseData"]["resultCode"]
         if code != "0000":
-            print_now("登陆失败, 接口日志" + str(data))
+            print_now("账号【"+self.account+"】，登陆失败，可能密码错误, 接口日志" + str(data))
             return None
         self.token = data["responseData"]["data"]["loginSuccessResult"]["token"]
         self.userId = data["responseData"]["data"]["loginSuccessResult"]["userId"]
@@ -87,21 +84,18 @@ class TelecomLogin:
         # print("secret: " + secret_ticket)
         ticket = self.decrypt_ticket(secret_ticket)
         # print("ticket: " + ticket)
-        return ticket
-
+        return ticket, self.token
     def main(self):
         if self.login() is None:
-            return "10086"
-        ticket = self.get_ticket()
-        return ticket
-
+            return "", ""
+        userLoginInfo = self.get_ticket()
+        return userLoginInfo
     @staticmethod
     def get_phoneNum(phone):
         result = ""
         for i in phone:
             result += chr(ord(i) + 2)
         return result
-
     @staticmethod
     def decrypt_ticket(secret_ticket):
         key = "1234567`90koiuyhgtfrdewsaqaqsqde"
@@ -109,7 +103,6 @@ class TelecomLogin:
         # ticket = des3_cbc_decrypt(key, bytes(TelecomLogin.process_text(secret_ticket)), iv)
         ticket = Crypt("des3", key, iv, "CBC").decrypt(TelecomLogin.process_text(secret_ticket))
         return ticket
-
     @staticmethod
     def encrypt_userid(userid):
         key = "1234567`90koiuyhgtfrdewsaqaqsqde"

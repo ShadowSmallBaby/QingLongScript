@@ -25,7 +25,7 @@ import sys
 sys.path.append('../')
 
 try:
-    import utils.notify
+    import Utils.notify
 except Exception as err:  # 异常捕捉
     print(f'{err}\n加载通知服务失败~\n')
 

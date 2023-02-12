@@ -10,11 +10,11 @@ from Crypto.PublicKey.RSA import importKey, construct
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.Cipher import AES
 from string import ascii_letters, digits
-from utils.tool import get_environ
+from Utils.tool import get_environ
 import os
 
 try:
-    import utils.notify
+    import Utils.notify
 except Exception as err:  # 异常捕捉
     print(f'{err}\n加载通知服务失败~\n')
 

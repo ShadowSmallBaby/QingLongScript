@@ -26,12 +26,12 @@ from random import randint, uniform, choice
 from sys import stdout, exit
 from base64 import b64encode
 from json import dumps
-from utils.encrypt_symmetric import Crypt
-from utils.tool import get_environ
+from Utils.encrypt_symmetric import Crypt
+from Utils.tool import get_environ
 import threading
 
 try:
-    from utils.notify import send
+    from Utils.notify import send
 except Exception as err:  # 异常捕捉
     print(f'{err}\n加载通知服务失败~\n')
 
@@ -43,8 +43,8 @@ msg_str = ""
 class China_Unicom:
     def __init__(self, phone_num, run_ua):
         self.phone_num = phone_num
-        default_ua = f"Mozilla/5.0 (Linux; Android {randint(8, 13)}; SM-S908U Build/TP1A.220810.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/{randint(95, 108)}.0.5359.128 Mobile Safari/537.36; unicom{{version:android@9.0{randint(0, 6)}00,desmobile:{self.phone_num}}};devicetype{{deviceBrand:,deviceModel:}};{{yw_code:}}"
-        # run_ua = get_environ(key="UNICOM_USERAGENT", default=default_ua, output=False)
+        default_ua = f"Mozilla/5.0 (Linux; Android {randint(8, 13)}; SM-S908U Build/TP1A.220810.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/{randint(95, 108)}.0.5359.128 Mobile Safari/537.36; unicom{{version:android@9.0{randint(0,6)}00,desmobile:{self.phone_num}}};devicetype{{deviceBrand:,deviceModel:}};{{yw_code:}}"
+        #run_ua = get_environ(key="UNICOM_USERAGENT", default=default_ua, output=False)
         if run_ua is None or run_ua == "":
             run_ua = default_ua
         # print("使用的UA："+run_ua)
@@ -76,9 +76,7 @@ class China_Unicom:
     def req(self, url, crypt_text, retry_num=5):
         while retry_num > 0:
             body = {
-                "sign": b64encode(
-                    Crypt(crypt_type="AES", key="update!@#1234567", iv="16-Bytes--String", mode="CBC").encrypt(
-                        crypt_text).encode()).decode()
+                "sign": b64encode(Crypt(crypt_type="AES", key="update!@#1234567", iv="16-Bytes--String", mode="CBC").encrypt(crypt_text).encode()).decode()
             }
             self.headers["Content-Length"] = str(len(dumps(body).replace(" ", "")))
             try:
@@ -120,7 +118,7 @@ class China_Unicom:
             exit(0)
 
     def watch_video(self):
-        global msg_str  # 声明我们在函数内部使用的是在函数外部定义的全局变量msg_str
+        global msg_str #声明我们在函数内部使用的是在函数外部定义的全局变量msg_str
         self.print_now("看广告获取积分任务: ")
         url = "https://10010.woread.com.cn/ng_woread_service/rest/activity/yearEnd/obtainScoreByAd"
         date = datetime.today().__format__("%Y%m%d%H%M%S")
@@ -130,6 +128,7 @@ class China_Unicom:
             self.print_now(data)
             if self.fail_num == 3:
                 self.print_now("当前任务出现异常 且错误次数达到3次 请手动检查")
+                # push("某通阅读", "当前任务出现异常 且错误次数达到3次 请手动检查")
                 msg_str += f"账号{self.phone_num}当前任务出现异常 且错误次数达到3次 请手动检查\n\n"
                 exit(0)
             if data["code"] == "9999":
@@ -141,12 +140,12 @@ class China_Unicom:
         return True
 
     def read_novel(self):
-        global msg_str  # 声明我们在函数内部使用的是在函数外部定义的全局变量msg_str
+        global msg_str #声明我们在函数内部使用的是在函数外部定义的全局变量msg_str
         self.get_cardid()
         self.get_cntindex()
         self.get_chapterallindex()
-        self.print_now("正在执行观看150次小说, 此过程较久, 最大时长为150 * 8s = 20min")
-        for i in range(150):
+        self.print_now(f"你的账号{self.phone_num} ：正在执行观看300次小说, 此过程较久, 最大时长为300 * 8s = 40min")
+        for i in range(300):
             date = datetime.today().__format__("%Y%m%d%H%M%S")
             chapterAllIndex = choice(self.chapterallindex_list)
             url = f"https://10010.woread.com.cn/ng_woread_service/rest/cnt/wordsDetail?catid={self.catid}&pageIndex={self.pageIndex}&cardid={randint(10000, 99999)}&cntindex={self.cntindex}&chapterallindex={chapterAllIndex}&chapterseno=3"
@@ -154,13 +153,14 @@ class China_Unicom:
             data = self.req(url, crypt_text)
             if self.fail_num == 3:
                 self.print_now("当前任务出现异常 且错误次数达到3次 请手动检查")
+                # push("某通阅读", "阅读任务出现异常 且错误次数达到3次 请手动检查")
                 msg_str += f"账号{self.phone_num}阅读任务出现异常 且错误次数达到3次 请手动检查\n\n"
                 exit(0)
             if data.get("code") != "0000":
                 self.print_now("阅读小说发生异常, 正在重新登录执行, 接口返回")
                 self.print_now(data)
                 return self.main()
-            sleep(uniform(2, 8))
+            sleep(uniform(2, 4))
 
     def query_score(self):
         url = "https://10010.woread.com.cn/ng_woread_service/rest/activity/yearEnd/queryUserScore"
@@ -180,7 +180,6 @@ class China_Unicom:
             self.activeIndex = data["data"]["activeindex"]
         else:
             self.print_now(f"活动id获取失败 将影响抽奖和查询积分")
-
     def get_cardid(self):
         """
         获取cardid
@@ -193,7 +192,6 @@ class China_Unicom:
         # print(data)
         self.pageIndex = data["data"]["recommendindex"] if "recommendindex" in data["data"] else "10725"
         self.cardid = data["data"]["catindex"] if "catindex" in data["data"] else "119056"
-
     def get_cntindex(self):
         url = "https://10010.woread.com.cn/ng_woread_service/rest/basics/recommposdetail/12279"
         self.headers.pop("Content-Length", "no")
@@ -202,7 +200,6 @@ class China_Unicom:
         book_num = len(booklist)
         self.catid = booklist[0]["catindex"] if "catindex" in booklist[0] else "119411"
         self.cntindex = booklist[randint(0, book_num - 1)]["cntindex"]
-
     def get_chapterallindex(self):
         url = f"https://10010.woread.com.cn/ng_woread_service/rest/cnt/chalist?catid=119411&pageIndex=10725&cardid=12279&cntindex={self.cntindex}"
         date = datetime.today().__format__("%Y%m%d%H%M%S")
@@ -215,7 +212,6 @@ class China_Unicom:
         while i < chapterallindex_num:
             self.chapterallindex_list[i] = chapterallindexlist[i]["chapterallindex"]
             i += 1
-
     def lotter(self):
         url = "https://10010.woread.com.cn/ng_woread_service/rest/activity/yearEnd/handleDrawLottery"
         date = datetime.today().__format__("%Y%m%d%H%M%S")
@@ -244,7 +240,7 @@ class China_Unicom:
         print(data)
 
     def query_red(self):
-        global msg_str  # 声明我们在函数内部使用的是在函数外部定义的全局变量msg_str
+        global msg_str #声明我们在函数内部使用的是在函数外部定义的全局变量msg_str
         url = "https://10010.woread.com.cn/ng_woread_service/rest/phone/vouchers/queryTicketAccount"
         date = datetime.today().__format__("%Y%m%d%H%M%S")
         crypt_text = f'{{"timestamp":"{date}","token":"{self.userinfo["token"]}","userId":"{self.userinfo["userid"]}","userIndex":{self.userinfo["userindex"]},"userAccount":"{self.userinfo["phone"]}","verifyCode":"{self.userinfo["verifycode"]}"}}'
@@ -253,9 +249,11 @@ class China_Unicom:
             can_use_red = data["data"]["usableNum"] / 100
             if can_use_red >= 3:
                 self.print_now(f"账号{self.phone_num}查询成功 你当前有话费红包{can_use_red} 可以去兑换了")
+                # push("某通阅读", f"账号{self.phone_num}查询成功 你当前有话费红包{can_use_red} 可以去兑换了")
                 msg_str += f"账号{self.phone_num}查询成功 你当前有话费红包{can_use_red} 可以去兑换了\n\n"
             else:
                 self.print_now(f"账号{self.phone_num}查询成功 你当前有话费红包{can_use_red} 不足兑换的最低额度")
+                # push("某通阅读", f"账号{self.phone_num}查询成功 你当前有话费红包{can_use_red} 不足兑换的最低额度")
                 msg_str += f"账号{self.phone_num}查询成功 你当前有话费红包{can_use_red} 不足兑换的最低额度\n\n"
 
     def main(self):
