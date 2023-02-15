@@ -67,7 +67,7 @@ class AppShare:
     def main(self):
         if self.login():
             self.sign()
-        # notify.send('AppShare消息推送', self.msg)
+        notify.send('AppShare消息推送', self.msg)
 
 
 # 获取header

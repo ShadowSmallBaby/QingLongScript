@@ -34,7 +34,27 @@ def read_yaml(path: str = 'config.yaml') -> dict:
         return yaml.safe_load(stream)
 
 
+# 读取多文档yaml文件
+def read_multiple_yaml(path: str = 'config.yaml') -> list:
+    arr = []
+    with open(pathlib.Path(path), 'rb') as stream:
+        for el in yaml.safe_load_all(stream):
+            arr.append(el)
+    return arr
+
+
 # 写入yaml文件
 def write_yaml(obj: dict, path: str = 'config.yaml'):
     with open(pathlib.Path(path), 'w') as stream:
         return yaml.dump(obj, stream)
+
+
+# 请求URL queryParams 转Python Dict
+def format_params(url: str) -> dict:
+    params = {}
+    query = url.split('?')[1].split('&')
+    for kv in query:
+        key = kv.split('=')[0]
+        value = kv.split('=')[1]
+        params.update({key: value})
+    return params
