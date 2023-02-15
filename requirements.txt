@@ -1,0 +1,6 @@
+requests
+beautifulsoup4
+PyYAML
+python-dotenv
+pycryptodome
+ddddocr
