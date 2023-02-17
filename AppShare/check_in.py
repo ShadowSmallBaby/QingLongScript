@@ -23,16 +23,19 @@ except Exception as err:  # 异常捕捉
 
 api = {
     'login': '/v2/login',
-    'sign': '/user/v1/daySign'
+    'sign': '/user/v1/daySign',
+    'userInfo': '/user/v1/fragmentMeData',
+    'referToken': '/user/login/v1/launchApp2'
 }
 
 
 class AppShare:
-    def __init__(self, uid, password, deviceId):
-        self.uid = uid
-        self.password = utils.md5_crypto(password)
-        self.oaid = utils.md5_crypto(deviceId)
+    def __init__(self, userInfo):
+        self.uid = userInfo.get('uid')
+        self.password = utils.md5_crypto(userInfo.get('password'))
+        self.oaid = utils.md5_crypto(userInfo.get('deviceId'))
         self.headers = get_header()
+        self.userInfo = userInfo
         self.msg = f'账号"{self.uid}"信息:\n'
 
     def login(self):
@@ -46,11 +49,42 @@ class AppShare:
         res = requests.get(f'{host}{api.get("login")}', params=params).json()
         isSuccess = res.get('code', 400) == 100
         msg = '登录成功\n' if isSuccess else '登录失败,请稍后重试\n'
+        if isSuccess:
+            self.get_info()
         self.msg += msg
         print(f'账号{self.uid}:{msg}')
         return isSuccess
 
-    def sign(self):
+    def get_info(self):
+        params = {
+            'oaid': self.oaid
+        }
+        params['sign'] = get_sign(params)
+        res = requests.get(f'{host}{api.get("userInfo")}', params=params).json()
+        isSuccess = res.get('code', 400) == 100
+        if isSuccess:
+            self.userInfo['pushDeviceToken'] = res.get('data').get('userConfig').get('pushDeviceToken')
+        print(f'账号{self.uid}信息:{res}')
+
+    def refer_token(self):
+        params = {
+            'oaid': self.oaid,
+            'versionCode': versionCode,
+            'deviceSdk': deviceSdk,
+            'pushDeviceToken': self.userInfo.get('pushDeviceToken'),
+        }
+        params['sign'] = get_sign(params)
+        params.setdefault('deviceApi', deviceApi)
+        res = requests.get(f'{host}{api.get("referToken")}', params=params).json()
+        isSuccess = res.get('code', 400) == 100
+        if isSuccess:
+            self.get_info()
+        msg = f'Token刷新: {res.get("message")}\n'
+        self.msg += msg
+        print(f'账号{self.uid}:{msg}')
+        return isSuccess
+
+    def check_in(self):
         params = {
             'oaid': self.oaid,
         }
@@ -59,14 +93,15 @@ class AppShare:
         msg = '签到失败,请稍后重试'
         if res.get('code', 400) == 100:
             data = res.get("data", {})
-            msg = f'{data.get("message")}: {data.get("count")}\n'
+            msg = f'签到成功: {data.get("count")}\n'
         print(res)
         self.msg += msg
         print(f'账号{self.uid}:{msg}')
 
     def main(self):
-        if self.login():
-            self.sign()
+        isSuccess = self.login() if self.userInfo.get('pushDeviceToken') is None else self.refer_token()
+        if isSuccess:
+            self.check_in()
         notify.send('AppShare消息推送', self.msg)
 
 
@@ -83,7 +118,7 @@ def get_sign(params):
     sign = ''
     datatime = datetime.now().strftime('%Y%m%d%H%M')
     for value in params.values():
-        sign += value
+        sign += str(value)
     sign += datatime
     return utils.md5_crypto(sign)
 
@@ -94,8 +129,8 @@ def get_device_id():
     return utils.random_sign(mask, 16)
 
 
-def run_threading(uid, password, deviceId):
-    AppShare(uid, str(password), deviceId).main()
+def run_threading(userInfo):
+    AppShare(userInfo).main()
 
 
 if __name__ == '__main__':
@@ -103,13 +138,16 @@ if __name__ == '__main__':
     config = utils.read_yaml()
     print(f'当前配置版本: {config.get("version")}')
     host = config.get('host')
+    deviceSdk = config.get('deviceSdk')
+    deviceApi = config.get('deviceApi')
+    versionCode = config.get('versionCode')
     userList = config.get('accounts')
     for user in userList:
         if user.get('deviceId') is None:
             user['deviceId'] = get_device_id()
-            utils.write_yaml(config)
-        thread = threading.Thread(target=run_threading, kwargs=user)
+        thread = threading.Thread(target=run_threading, args=(user,))
         threadList.append(thread)
     for thread in threadList:
         thread.start()
         thread.join()
+    utils.write_yaml(config)

@@ -22,7 +22,7 @@ def create_timestamp(figure: int = 10) -> str:
 
 # MD5加密
 def md5_crypto(text: str, short: bool = False, upper: bool = True, coding: str = 'utf8') -> str:
-    ciphertext = hashlib.md5(text.encode(coding)).hexdigest()
+    ciphertext = hashlib.md5(str(text).encode(coding)).hexdigest()
     if short:
         ciphertext = ciphertext[8:-8]
     return ciphertext.upper() if upper else ciphertext

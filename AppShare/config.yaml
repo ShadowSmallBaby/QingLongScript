@@ -1,6 +1,16 @@
-accounts:
-- deviceId: ~
-  password: AppShare
-  uid: AppShare
 host: https://appshare.vip
-version: v1.0.0
+versionCode: sjBkCIqdMzm5fo5CDkWXHw%3D%3D
+deviceApi: 64
+deviceSdk: 30
+accounts:
+# 仅修改账号密码即可
+- deviceId: ~
+  password: 123456
+  pushDeviceToken: ~
+  uid: admin@gmail.com
+# 多账号示例
+#- deviceId: ~
+#  password: 123456
+#  pushDeviceToken: ~
+#  uid: admin@gmail.com
+version: v1.1.0
