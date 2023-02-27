@@ -3,7 +3,7 @@ accounts:
     # 小米账户ID 非小米账户用户名
     password: abc123
     # 小米账户密码或其MD5哈希
-    user-agent: 'Mozilla/5.0 (Android 11; Mobile; rv:95.0) Gecko/95.0 Firefox/95.0'
+    user-agent: 'Mozilla/5.0 (Linux; U; Android 11; zh-cn; M2007J1SC Build/RKQ1.200826.002) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/89.0.4389.116 Mobile Safari/537.36 XiaoMi/MiuiBrowser/15.7.22 app/vipaccount'
     # 登录小米社区时所用浏览器的 User-Agent
     # 可在此工具查看：https://tool.chinaz.com/useragent
     carrot-pull: false
@@ -11,10 +11,12 @@ accounts:
     check-in: true
     # 小米社区成长值签到，可能存在封号风险
     # 本脚本默认完成登录社区和三次点赞及三次浏览十秒帖子的成长值任务
+    browse-post: 1
+    # 浏览十秒帖子
     browse-specialpage: false
     # 小米社区在活动期间可能会出现限时的“浏览指定专题页”任务
     # 考虑到安全问题，建议在存在该限时活动手动打开，活动结束时关闭
-    thumb-up: false
+    thumb-up: 1
     # 小米社区点赞
     board-follow: false
     # 小米社区加入小米圈子
@@ -24,10 +26,11 @@ accounts:
 #    user-agent: 'Mozilla/5.0 (Android 11; Mobile; rv:95.0) Gecko/95.0 Firefox/95.0'
 #    carrot-pull: false
 #    check-in: false
+#    browse-post: 3
 #    browse-specialpage: false
-#    thumb-up: true
+#    thumb-up: 3
 #    board-follow: true
 logging: false
 # 归档日志到本地文件
-version: v1.5.2
+version: v1.5.4
 # config 文件版本号，debug用
