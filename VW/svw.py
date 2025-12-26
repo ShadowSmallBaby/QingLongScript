@@ -6,6 +6,7 @@ import random
 import hashlib
 import os
 from urllib.parse import quote
+from datetime import datetime, timedelta
 
 import requests
 
@@ -19,6 +20,7 @@ except Exception as err:
 _global_cache_data = {}
 _cache_file_path = os.path.join(os.path.dirname(__file__), 'svw_cache.json')
 
+
 # 从JWT解析过期时间（毫秒时间戳）
 def _get_expire_from_jwt(token):
   if not token:
@@ -30,6 +32,7 @@ def _get_expire_from_jwt(token):
   except Exception:
     pass
   return None
+
 
 # 初始化全局缓存（程序启动时调用）
 def init_global_cache():
@@ -45,6 +48,7 @@ def init_global_cache():
   except Exception as e:
     print(f'加载缓存文件失败: {e}')
     _global_cache_data = {}
+
 
 # 刷新全局缓存到文件（程序结束时调用）
 def flush_global_cache():
@@ -106,7 +110,9 @@ def generate_random_device_ids():
   android_version = random.randint(8, 16)
   uuid_hex = utils.create_uuid().replace('-', '')
   random_16 = uuid_hex[8:24]
-  did = f'VW_APP_23127PN0CC_{uuid_hex}_{android_version}_4.2.6'
+  app_version = '4.2.6'
+  device_model = '23127PN0CC'
+  did = f'VW_APP_{device_model}_{uuid_hex}_{android_version}_{app_version}'
   device_id = f'vw{random_16}'
   web_id = f'vw{utils.create_uuid()}'
 
@@ -117,24 +123,38 @@ def generate_random_device_ids():
   }
 
 
+# 从 did 解析设备信息
+def parse_device_info_from_did(did):
+  parts = did.split('_')
+  return {
+    'model': parts[2],
+    'systemVersion': parts[-2],
+    'appVersion': parts[-1],
+  }
+
+
 # ==================== SVW 主类 ====================
 class SVW:
-  # 初始化
   def __init__(self, account, password, did=None, device_id=None, web_id=None, task_whitelist=None, unified_msg=True,
                h5_config=None, app_config=None):
-    self.account = account
+    self.account = str(account)
     self.password = password
 
-    # 如果没有传入设备ID，则随机生成
-    if did is None or device_id is None or web_id is None:
-      random_ids = generate_random_device_ids()
-      self.did = did or random_ids['did']
-      self.device_id = device_id or random_ids['device_id']
-      self.web_id = web_id or random_ids['web_id']
-    else:
-      self.did = did
-      self.device_id = device_id
-      self.web_id = web_id
+    # 消息管理
+    self.msg = []
+    self.unified_msg = unified_msg
+    self.task_whitelist = task_whitelist or []
+
+    # 设备信息初始化：传入 → 缓存 → 随机生成
+    user_cache = _global_cache_data.get(self.account, {})
+    cached_device = user_cache.get('device_info', {})
+
+    self.did = did or cached_device.get('did') or generate_random_device_ids()['did']
+    self.device_id = device_id or cached_device.get('deviceId') or generate_random_device_ids()['device_id']
+    self.web_id = web_id or cached_device.get('webId') or generate_random_device_ids()['web_id']
+
+    # 设备认证状态
+    self.is_auth = cached_device.get('isAuth', False)
 
     # Token 相关
     self.id_token = None
@@ -143,11 +163,6 @@ class SVW:
     self.sx_token = None
     self.user_id = None
     self.idp_id = None
-
-    # 消息管理
-    self.msg = []
-    self.unified_msg = unified_msg
-    self.task_whitelist = task_whitelist or []
 
     # H5 和 APP 配置
     self.h5_config = h5_config or {}
@@ -236,25 +251,33 @@ class SVW:
         self.user_id = user_cache.get('user_id')
         self.idp_id = user_cache.get('idp_id')
 
-        if self.sx_token:
+        # 判断缓存是否有效：优先检查 server_token，其次检查 id_token
+        if self.server_token:
           self.log('从缓存加载Token成功')
           return True
+        elif self.id_token:
+          self.log('从缓存加载idToken成功（缺少server_token，将自动获取）')
+          return True
         else:
-          self.log('缓存的sx_token已过期')
+          self.log('缓存中的关键token已过期')
+          return False
+      else:
+        self.log('缓存中无该账号信息')
+        return False
     except Exception as e:
       self.log(f'加载缓存失败: {e}')
-
-    return False
+      return False
 
   # 保存缓存
-  def save_cache(self, id_token_expires_in=None, server_token_expires_in=None, sx_token_expires_in=None):
+  def save_cache(self, id_token_expires_in=None, server_token_expires_in=None):
     try:
       # 处理过期时间：如果传入的 expires_in 为 None，从 JWT 解析
       if id_token_expires_in is None and self.id_token:
         id_token_expires_in = _get_expire_from_jwt(self.id_token)
       if server_token_expires_in is None and self.server_token:
         # server_token 可能是 "Bearer xxx" 格式，需要提取 JWT 部分
-        token = self.server_token.replace('Bearer ', '') if self.server_token.startswith('Bearer ') else self.server_token
+        token = self.server_token.replace('Bearer ', '') if self.server_token.startswith(
+          'Bearer ') else self.server_token
         server_token_expires_in = _get_expire_from_jwt(token)
 
       # 格式化 token
@@ -266,14 +289,20 @@ class SVW:
         self.server_token, server_token_expires_in
       ) if self.server_token else None
 
-      # 更新全局缓存中的当前用户数据
+      # 更新全局缓存
       _global_cache_data[self.account] = {
         'id_token': id_token_to_save,
         'server_token': server_token_to_save,
         'refresh_token': self.refresh_token,
         'sx_token': self.sx_token,
         'user_id': self.user_id,
-        'idp_id': self.idp_id
+        'idp_id': self.idp_id,
+        'device_info': {
+          'did': self.did,
+          'deviceId': self.device_id,
+          'webId': self.web_id,
+          'isAuth': self.is_auth
+        }
       }
 
       self.log('Token缓存成功')
@@ -314,13 +343,122 @@ class SVW:
 
         self.log('密码登录成功')
         self.save_cache(id_token_expires_in=id_token_expires_in)
-        return True
+        return True, None, None
       else:
-        self.log(f'密码登录失败: {res.get("description", "未知错误")}')
-        return False
+        error_code = res.get('code', 'Unknown')
+        error_msg = res.get('description') or res.get('message', '未知错误')
+        self.log(f'密码登录失败: Code=[{error_code}], Message={error_msg}')
+        return False, error_code, error_msg
     except Exception as e:
       self.log(f'登录异常: {e}')
+      return False, None, str(e)
+
+  # 获取短信验证码
+  def get_sms_code(self):
+    self.log_action('获取短信验证码')
+
+    url = 'https://api.mos.csvw.com/mos/security/api/v1/smsCode/getSmsCode/loginAndRegister'
+    headers = self._build_app_headers()
+    headers['Content-Type'] = 'application/x-www-form-urlencoded'
+
+    data = {
+      'mobile': self.account,
+      'type': 'login',
+      'brand': 'vw'
+    }
+
+    try:
+      res = requests.post(url, headers=headers, data=data).json()
+      if res['code'] == '000000':
+        self.log('验证码发送成功')
+        return True
+      else:
+        self.log(f'获取验证码失败: {res.get("description", "未知错误")}')
+        return False
+    except Exception as e:
+      self.log(f'获取验证码异常: {e}')
       return False
+
+  # 验证码登录
+  def sms_login(self, sms_code):
+    self.log_action('验证码登录')
+
+    url = 'https://api.mos.csvw.com/mos/security/api/v2/app/actions/loginAndRegister'
+    headers = self._build_app_headers()
+    body = {
+      'brand': 'vw',
+      'deviceId': self.did,
+      'deviceType': 'android',
+      'mobile': self.account,
+      'smsCode': sms_code,
+      'scope': 'openid',
+      'picContent': '',
+      'picTicket': '',
+      'consentTypeList': 'app_agreement,app_privacy',
+      'isNeedSign': True,
+    }
+
+    try:
+      res = requests.post(url, headers=headers, json=body).json()
+      if res['code'] == '000000':
+        self.id_token = res['data']['idToken']
+        self.user_id = res['data']['userId']
+        self.refresh_token = res['data']['refreshToken']
+        id_token_expires_in = res['data'].get('expireIn')
+
+        # 解析 JWT 获取 idpId
+        jwt_payload = utils.decode_jwt_payload(self.id_token)
+        if jwt_payload:
+          self.idp_id = jwt_payload.get('sub')
+
+        self.log('验证码登录成功')
+        self.save_cache(id_token_expires_in=id_token_expires_in)
+        return True
+      else:
+        error_code = res.get('code', 'Unknown')
+        error_msg = res.get('description') or res.get('message', '未知错误')
+        self.log(f'验证码登录失败: Code=[{error_code}], Message={error_msg}')
+        return False
+    except Exception as e:
+      self.log(f'验证码登录异常: {e}')
+      return False
+
+  # 等待用户输入验证码
+  def wait_for_sms_code(self, timeout_minutes=4):
+    timeout_seconds = timeout_minutes * 60
+    end_time = datetime.now() + timedelta(seconds=timeout_seconds)
+
+    print(f'\n[{self.account}] ========== 请输入短信验证码 ==========')
+    print(f'[{self.account}] 超时时间: {timeout_minutes}分钟')
+    print(f'[{self.account}] ========================================')
+
+    while datetime.now() < end_time:
+      remaining_seconds = int((end_time - datetime.now()).total_seconds())
+
+      if remaining_seconds <= 0:
+        break
+
+      remaining_minutes = remaining_seconds // 60
+      remaining_secs = remaining_seconds % 60
+
+      try:
+        # 显示倒计时并等待输入
+        sms_code = input(
+          f'\r[{self.account}] 剩余时间: {remaining_minutes}分{remaining_secs:02d}秒，请输入验证码 > ').strip()
+
+        if sms_code:
+          print(f'\n[{self.account}] 已接收验证码输入')
+          return sms_code
+
+      except (EOFError, KeyboardInterrupt):
+        print(f'\n[{self.account}] 检测到中断，退出验证码输入')
+        return None
+      except Exception:
+        # 忽略其他输入异常
+        pass
+
+    print(f'\n[{self.account}] ========== 验证码输入超时 ==========')
+    return None
 
   # 获取服务端令牌
   def get_server_token(self):
@@ -345,6 +483,7 @@ class SVW:
       if res['code'] == '000000':
         self.server_token = f'{res["data"]["tokenType"]} {res["data"]["accessToken"]}'
         self.refresh_token = res['data']['refreshToken']
+        self.user_id = res['data'].get('userId', self.user_id)
 
         server_token_expires_in = res['data'].get('expiresIn')
 
@@ -356,6 +495,83 @@ class SVW:
         return False
     except Exception as e:
       self.log(f'获取令牌异常: {e}')
+      return False
+
+  # 设备上报
+  def upload_device(self):
+    self.log_action('设备上报')
+
+    url = 'https://api.mos.csvw.com/mos/security/api/v1/mdm/uploadDevice'
+    headers = self._build_app_headers()
+
+    # 从 did 解析设备信息
+    device_info = parse_device_info_from_did(self.did)
+
+    body = {
+      'appBuild': '276',
+      'appName': '上汽大众',
+      'deviceId': self.device_id,
+      'deviceInfo': '',
+      'locallizedModel': '',
+      'deviceName': 'Xiaomi',
+      'systemName': 'android',
+      'did': self.did,
+      'appBrand': 'vw',
+      'deviceBrand': 'vw',
+      'terminalType': 'app',
+      'model': device_info['model'],
+      'systemVersion': device_info['systemVersion'],
+      'appVersion': device_info['appVersion']
+    }
+
+    try:
+      res = requests.post(url, headers=headers, json=body).json()
+      if res['code'] == '000000':
+        self.log('设备上报成功')
+        return True
+      else:
+        self.log(f'设备上报失败: {res.get("description", "未知错误")}')
+        return False
+    except Exception as e:
+      self.log(f'设备上报异常: {e}')
+      return False
+
+  # 设备认证
+  def device_auth(self):
+    if not self.server_token or not self.user_id:
+      self.log('缺少server_token或user_id，无法进行设备认证')
+      return False
+
+    if not self.upload_device():
+      self.log('设备上报失败，跳过设备认证')
+      return False
+
+    self.log_action('设备认证')
+
+    url = 'https://api.mos.csvw.com/mos/security/api/v1/mdm/updateAccount'
+    headers = self._build_app_headers(need_auth=True)
+    body = {
+      'deviceId': self.device_id,
+      'did': self.did,
+      'email': '',
+      'phone': self.account,
+      'status': 'active',
+      'terminalType': 'app',
+      'userBrand': 'vw',
+      'userId': str(self.user_id)
+    }
+
+    try:
+      res = requests.post(url, headers=headers, json=body).json()
+      if res['code'] == '000000':
+        self.log('设备认证成功')
+        self.is_auth = True
+        return True
+      else:
+        self.log(f'设备认证失败: {res.get("description", "未知错误")}')
+        return False
+    except Exception as e:
+      self.log(f'设备认证异常: {e}')
       return False
 
   # 获取用户令牌
@@ -373,9 +589,7 @@ class SVW:
       res = requests.get(url, headers=headers).json()
       if res['code'] == '000000':
         self.sx_token = res['data']['userToken']
-        expires_in = res['data'].get('expiresIn')
         self.log('获取用户令牌成功')
-        self.save_cache(sx_token_expires_in=expires_in)
         return True
       else:
         self.log(f'获取用户令牌失败: {res.get("description", "未知错误")}')
@@ -434,10 +648,7 @@ class SVW:
       res = requests.post(url, headers=headers, json=body).json()
       if res['code'] == '000000':
         self.sx_token = res['data']['userToken']
-        # 解析过期时间
-        expires_in = res['data'].get('expiresIn')
         self.log('刷新用户令牌成功')
-        self.save_cache(sx_token_expires_in=expires_in)
         return True
       else:
         self.log(f'刷新用户令牌失败: {res.get("description", "未知错误")}')
@@ -448,26 +659,95 @@ class SVW:
 
   # 初始化token
   def init_tokens(self):
+    need_sms_codes = ['510073']  # 需要验证码登录的错误码
+    need_sms_keywords = ['验证码', '短信', 'sms']  # 请使用验证码登录
+
+    def try_pwd_login():
+      """尝试密码登录，失败时检查是否需要验证码登录"""
+      success, error_code, error_msg = self.pwd_login()
+      if success:
+        return True, False  # 登录成功，不需要验证码
+
+      # 优先检查错误码是否提示需要验证码登录
+      if error_code and error_code in need_sms_codes:
+        self.log(f'检测到错误码[{error_code}]，需要验证码登录，正在切换到验证码登录方式...')
+        return False, True  # 登录失败，需要验证码登录
+
+      # 检查错误信息是否提示需要验证码登录
+      if error_msg and any(keyword in error_msg for keyword in need_sms_keywords):
+        self.log(f'检测到关键词，需要验证码登录，正在切换到验证码登录方式...')
+        return False, True  # 登录失败，需要验证码登录
+
+      return False, False  # 登录失败，不需要验证码登录
+
+    def try_sms_login():
+      """尝试验证码登录"""
+      # 1. 获取验证码
+      if not self.get_sms_code():
+        self.log('获取验证码失败，无法继续')
+        return False
+
+      # 2. 等待输入验证码（4分钟超时）
+      sms_code = self.wait_for_sms_code(timeout_minutes=4)
+      if not sms_code:
+        self.log('未输入验证码或输入超时，登录流程终止')
+        return False
+
+      # 3. 使用验证码登录
+      if self.sms_login(sms_code):
+        return True
+      else:
+        self.log('验证码登录失败')
+        return False
+
+    # ============ 主流程开始 ============
+    # 1. 尝试从缓存加载
     if self.load_cache():
       if not self.server_token:
         if self.refresh_token:
           if not self.refresh_server_token():
-            if not (self.pwd_login() and self.get_server_token()):
+            # 刷新失败，尝试重新登录
+            pwd_success, need_sms = try_pwd_login()
+            if pwd_success:
+              self.get_server_token()
+            elif need_sms:
+              if not try_sms_login():
+                return False
+              self.get_server_token()
+            else:
               return False
         else:
-          if not (self.pwd_login() and self.get_server_token()):
+          # 没有refresh_token，直接尝试登录
+          pwd_success, need_sms = try_pwd_login()
+          if pwd_success:
+            self.get_server_token()
+          elif need_sms:
+            if not try_sms_login():
+              return False
+            self.get_server_token()
+          else:
             return False
+      # 有server_token，继续
       if self.sx_token:
         self.refresh_sx_token()
       elif self.server_token:
         self.get_sx_token()
-      return bool(self.server_token)
 
-    if self.pwd_login() and self.get_server_token():
-      self.get_sx_token()
-      return bool(self.server_token)
+    # 2. 无缓存，直接登录
+    else:
+      pwd_success, need_sms = try_pwd_login()
+      if pwd_success:
+        self.get_server_token()
+        self.get_sx_token()
+      elif need_sms:
+        if not try_sms_login():
+          return False
+        self.get_server_token()
+        self.get_sx_token()
+      else:
+        return False
 
-    return False
+    return bool(self.server_token)
 
   # ==================== 签到系统 ====================
   # 查询签到日历
@@ -1046,6 +1326,12 @@ class SVW:
       self.log('Token初始化失败！')
       self.flush_messages()
       return
+    # 1.1 设备认证绑定
+    if not self.is_auth:
+      self.log('检测到设备未认证，尝试设备认证')
+      self.device_auth()
+    # 1.2 保存缓存
+    self.save_cache()
 
     # 2. 签到
     self.process_sign_in()
