@@ -16,12 +16,12 @@ try:
 except Exception as err:
   print(f'{err}\n加载工具服务失败~\n')
 
-# 全局缓存数据（内存中）
+# 全局缓存数据
 _global_cache_data = {}
 _cache_file_path = os.path.join(os.path.dirname(__file__), 'svw_cache.json')
 
 
-# 从JWT解析过期时间（毫秒时间戳）
+# 从JWT解析过期时间
 def _get_expire_from_jwt(token):
   if not token:
     return None
@@ -423,12 +423,50 @@ class SVW:
       self.log(f'验证码登录异常: {e}')
       return False
 
+  # 从环境变量解析当前账号的验证码
+  def _parse_sms_code_from_env(self):
+    """
+    从环境变量 SVW_SMS_CODES 解析当前账号的验证码
+
+    环境变量格式：
+    - 账号之间用 & 分隔
+    - 账号和验证码用 # 分隔
+    """
+    env_value = utils.get_environ('SVW_SMS_CODES', '', False)
+    if not env_value:
+      return ''
+
+    # 按账号分割
+    accounts = env_value.split('&')
+    for account_code in accounts:
+      if not account_code:
+        continue
+      # 按账号和验证码分割
+      parts = account_code.split('#')
+      if len(parts) == 2:
+        account, code = parts
+        if account == self.account:
+          return code
+
+    return ''
+
   # 等待用户输入验证码
   def wait_for_sms_code(self, timeout_minutes=4):
+    ql_flag = utils.is_ql_env()
     timeout_seconds = timeout_minutes * 60
     end_time = datetime.now() + timedelta(seconds=timeout_seconds)
 
-    print(f'\n[{self.account}] ========== 请输入短信验证码 ==========')
+    if ql_flag:
+      print(f'\n[{self.account}] ========== 请将短信验证码配置环境变量[SVW_SMS_CODES]后运行 ==========')
+      sms_code = self._parse_sms_code_from_env()
+      if sms_code:
+        print(f'\n[{self.account}] 已从环境变量获取验证码')
+        return sms_code
+      else:
+        print(f'\n[{self.account}] 未配置环境变量[SVW_SMS_CODES], 请配置后再次运行')
+        exit(0)
+    else:
+      print(f'\n[{self.account}] ========== 请输入短信验证码 ==========')
     print(f'[{self.account}] 超时时间: {timeout_minutes}分钟')
     print(f'[{self.account}] ========================================')
 
@@ -442,10 +480,8 @@ class SVW:
       remaining_secs = remaining_seconds % 60
 
       try:
-        # 显示倒计时并等待输入
-        sms_code = input(
-          f'\r[{self.account}] 剩余时间: {remaining_minutes}分{remaining_secs:02d}秒，请输入验证码 > ').strip()
-
+        # 本地环境：显示倒计时并等待输入
+        sms_code = input(f'\r[{self.account}] 剩余时间: {remaining_minutes}分{remaining_secs:02d}秒，请输入验证码 > ').strip()
         if sms_code:
           print(f'\n[{self.account}] 已接收验证码输入')
           return sms_code
@@ -682,7 +718,16 @@ class SVW:
 
     def try_sms_login():
       """尝试验证码登录"""
-      # 1. 获取验证码
+      # 0. 优先检查环境变量是否已有验证码
+      env_sms_code = self._parse_sms_code_from_env()
+      if env_sms_code:
+        self.log('检测到环境变量已有验证码，直接登录')
+        if self.sms_login(env_sms_code):
+          return True
+        else:
+          self.log('环境变量验证码登录失败,重新获取验证码')
+
+      # 1. 发送验证码
       if not self.get_sms_code():
         self.log('获取验证码失败，无法继续')
         return False
