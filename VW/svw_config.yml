@@ -1,0 +1,24 @@
+title: 上汽大众签到
+version: v1.0.0
+# 统一消息输出(true=流程结束后统一输出,false=立即输出)
+unified_msg: true
+# 任务白名单: 只执行白名单中的任务(留空则执行所有任务)
+task_whitelist:
+  - 文章点赞
+  - 文章浏览
+  - 文章分享
+  - 参与文章互动评论
+# H5请求头配置
+h5:
+  app_key: SVW_COMMUNITY_H5
+  user_agent: Mozilla/5.0 (Linux; Android 16; 23127PN0CC Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.174 Mobile Safari/537.36 SVW Android
+  referer: https://mweb.mos.csvw.com/mos-mweb/app-misc/
+# APP请求头配置
+app:
+  user_agent: okhttp/4.12.0
+accounts:
+#  - account: 账号(手机号)
+#    password: 密码
+#    did: 设备ID(可选,不填随机生成)
+#    deviceId: APP设备标识(可选,不填随机生成)
+#    webId: H5设备标识(可选,不填随机生成)
