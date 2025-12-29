@@ -212,3 +212,12 @@ def strip_html_tags(html: str) -> str:
   if not html:
     return ""
   return re.sub(r'<[^>]+>', '', html).strip()
+
+
+# 是否青龙环境
+def is_ql_env() -> bool:
+  try:
+    QLAPI
+    return True
+  except NameError:
+    return False
